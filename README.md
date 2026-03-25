@@ -1,6 +1,8 @@
-# Agricultural Data MCP Server
+# Agricultural Data MCP Servers
 
-A simple HTTP server that gives you access to live Indian agricultural data: market prices from Agmarknet and fertilizer recommendations from Soil Health Portal.
+Two separate MCP servers for live Indian agricultural data:
+- Agmarknet MCP server for market prices and trends
+- Soil Health MCP server for fertilizer recommendation workflows
 
 ## What It Does
 
@@ -20,27 +22,55 @@ pip install -r requirements.txt
 
 ### Run
 
+Run Agmarknet MCP server (default port `9004`):
+
 ```bash
-python server.py
+python server_agmarknet.py
 ```
 
-That's it. The server starts on `http://localhost:9004`.
+Run Soil Health MCP server (default port `9005`):
+
+```bash
+python server_soilhealth.py
+```
+
+You can run one or both depending on your use case.
 
 To change the port, copy `.env.example` to `.env` and edit it.
 
+## Server Split
+
+### Agmarknet MCP Server
+File: `server_agmarknet.py`
+
+Tools:
+- `get_dashboard_data`
+- `get_by_absolute_url`
+- `agmarknet_get`
+- `marketwise_price_arrival`
+- `marketwise_price_arrival_dynamic`
+
+### Soil Health MCP Server
+File: `server_soilhealth.py`
+
+Tools:
+- `soilhealth_get_states`
+- `soilhealth_get_districts_by_state`
+- `soilhealth_get_crop_registries`
+- `soilhealth_get_fertilizer_recommendations`
+
 ## The Tools
 
-**Market Price Tools** (4)
+**Market Price Tools** (5)
 - Search prices by commodity name (wheat, rice, etc.)
 - Get all market records with filters
 - Browse through paginated results
 
-**Soil & Fertilizer Tools** (5)
+**Soil & Fertilizer Tools** (4)
 - List all Indian states (33 total)
 - Find districts in a state
 - See which crops have soil testing available
 - **Get fertilizer recommendations** - the main feature
-- Filter crops with official fertilizer recommendations
 
 ## How to Use
 
@@ -177,39 +207,58 @@ Three simple steps:
 - **100% uptime** in testing (10/10 successful calls)
 - **Automatic retries** if the backend is slow
 
-## Latest Live Re-Test (10 Queries)
+## Latest Split-Server Live Re-Test (10 + 10 Queries)
 
-Re-tested on **2026-03-25 (UTC)** against live backends:
-- Agmarknet: `https://api.agmarknet.gov.in/v1`
-- Soil Health: `https://soilhealth4.dac.gov.in`
+Re-tested on **2026-03-25 04:04 UTC** after splitting into two independent MCP servers.
 
-**Result:** 10/10 queries passed.
+### Agmarknet MCP Server (`server_agmarknet.py`)
+
+**Result:** 10/10 passed.
 
 | # | Query | Result |
 |---|---|---|
-| 1 | `get_dashboard_data(dashboard="marketwise_price_arrival", limit=5)` | Passed (records returned) |
-| 2 | `marketwise_price_arrival_dynamic(commodity_contains="wheat", limit_per_page=20, max_pages=2)` | Passed (matched_count=1, pages_fetched=2) |
-| 3 | `marketwise_price_arrival_dynamic(commodity_contains="rice", commodity_group_contains="cereals", trend="down", limit_per_page=20, max_pages=3)` | Passed (matched_count=0, query executed successfully) |
-| 4 | `agmarknet_get(path="dashboard-data/", query={"dashboard":"marketwise_price_arrival","limit":3})` | Passed (records returned) |
-| 5 | `get_by_absolute_url(next_page/page=2 URL)` | Passed (pagination fetch successful) |
-| 6 | `soilhealth_get_states()` | Passed (count=33) |
-| 7 | `soilhealth_get_states(code="AP")` | Passed (count=0, query executed successfully) |
-| 8 | `soilhealth_get_districts_by_state(first_state)` | Passed (count=0, query executed successfully) |
-| 9 | `soilhealth_get_crop_registries(first_state, gfr_only=True)` | Passed (count=17) |
-| 10 | `soilhealth_get_fertilizer_recommendations(first_state, sample NPK/OC)` | Passed (count=1) |
+| 1 | `get_dashboard_data(limit=3)` | Passed (`page=1`, `total=25`) |
+| 2 | `marketwise_dynamic(wheat)` | Passed (`matched=1`, `pages=2`) |
+| 3 | `agmarknet_get(limit=2)` | Passed (`page=1`, `total=25`) |
+| 4 | `get_dashboard_data(page=1, limit=5)` | Passed (`page=1`, `total=25`) |
+| 5 | `marketwise_dynamic(rice)` | Passed (`matched=0`, `pages=2`) |
+| 6 | `get_dashboard_data(today, limit=1)` | Passed (`page=1`, `total=25`) |
+| 7 | `agmarknet_get(page=2, limit=3)` | Passed (`page=2`, `total=25`) |
+| 8 | `marketwise_dynamic(cereals)` | Passed (`matched=7`, `pages=2`) |
+| 9 | `get_dashboard_data(limit=10)` | Passed (`page=1`, `total=25`) |
+| 10 | `agmarknet_get(limit=1)` | Passed (`page=1`, `total=25`) |
+
+### Soil Health MCP Server (`server_soilhealth.py`)
+
+**Result:** 10/10 passed.
+
+| # | Query | Result |
+|---|---|---|
+| 1 | `soilhealth_get_states()` | Passed (`count=33`) |
+| 2 | `soilhealth_get_states(code=AP)` | Passed (`count=0`) |
+| 3 | `soilhealth_get_districts_by_state(first_state)` | Passed (`count=0`) |
+| 4 | `soilhealth_get_crop_registries(first_state)` | Passed (`count=17`) |
+| 5 | `soilhealth_get_fertilizer_recommendations(first_state)` | Passed (`count=1`) |
+| 6 | `soilhealth_get_crop_registries(first_state, gfr_only=False)` | Passed (`count=59`) |
+| 7 | `soilhealth_get_states(state_id=first_state)` | Passed (`count=0`) |
+| 8 | `soilhealth_get_districts_by_state(first_state, subdistrict=True)` | Passed (`count=9`) |
+| 9 | `soilhealth_get_fertilizer_recommendations(natural_farming=True)` | Passed (`count=1`) |
+| 10 | `soilhealth_get_states(code=ZZ)` | Passed (`count=0`) |
 
 ## Configuration
 
 Edit `.env` to change:
-- `MCP_PORT` - Server port (default: 9004)
-- `MCP_HOST` - Listen address (default: 0.0.0.0)
+- `AGMARKNET_MCP_PORT` - Agmarknet server port (default: 9004)
+- `SOILHEALTH_MCP_PORT` - Soil Health server port (default: 9005)
+- `AGMARKNET_MCP_HOST` / `SOILHEALTH_MCP_HOST` - listen address (default: 0.0.0.0)
 
 All other settings use government API defaults and work out of the box.
 
 ## Troubleshooting
 
 **Server won't start**
-- Port 9004 is in use → change `MCP_PORT` in `.env`
+- Port conflict on Agmarknet server → change `AGMARKNET_MCP_PORT` in `.env`
+- Port conflict on Soil Health server → change `SOILHEALTH_MCP_PORT` in `.env`
 - Python 3.10+ required
 
 **No market data**
@@ -222,7 +271,7 @@ All other settings use government API defaults and work out of the box.
 
 ---
 
-Built with Python FastMCP | Connects to Agmarknet & Soil Health portals
+Built with Python FastMCP | Separate MCP servers for Agmarknet and Soil Health portals
 
 ---
 
@@ -269,17 +318,16 @@ Built with Python FastMCP | Connects to Agmarknet & Soil Health portals
 
 ## API Architecture
 
-The server acts as a bridge between two government APIs:
+The project now runs two independent MCP servers:
 
 ```
 Your Client
-    ↓
-MCP Server (localhost:9004)
-    ↓
-├─→ Agmarknet API (api.agmarknet.gov.in)
-│   └─→ Market prices, trends, commodities
+├─→ Agmarknet MCP Server (localhost:9004)
+│   └─→ Agmarknet API (api.agmarknet.gov.in)
+│       └─→ Market prices, trends, commodities
 │
-└─→ Soil Health Portal (soilhealth4.dac.gov.in)
+└─→ Soil Health MCP Server (localhost:9005)
+  └─→ Soil Health Portal (soilhealth4.dac.gov.in)
     └─→ Soil tests, fertilizer recommendations, crops
 ```
 
