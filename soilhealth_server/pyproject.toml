@@ -1,12 +1,7 @@
 [project]
-name = "agri-mcp-servers"
+name = "soilhealth-server"
 version = "0.1.0"
-description = "Split MCP servers for Agmarknet and Soil Health backends"
-authors = [
-    { name = "your-name", email = "you@example.com" }
-]
-license = { text = "MIT" }
-readme = "README.md"
+description = "Standalone Soil Health MCP server"
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "fastmcp>=2.12.3,<3.0.0",

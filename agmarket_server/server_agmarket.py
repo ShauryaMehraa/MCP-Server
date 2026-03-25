@@ -34,6 +34,14 @@ mcp = FastMCP(
 )
 
 
+def _norm_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_all_value(value: str | None, all_label: str) -> bool:
+    return _norm_text(value) in {"", _norm_text(all_label)}
+
+
 def _encode_list(values: list[int] | None) -> str | None:
     if values is None:
         return None
@@ -124,7 +132,7 @@ async def get_dashboard_data(
     page: int | None = None,
     format: str = "json",
 ) -> dict[str, Any]:
-    """Fetch Agmarknet dashboard data with filters and pagination."""
+    """Fetch Agmarknet dashboard data with explicit filters and pagination."""
     if limit < 1:
         raise ValueError("limit must be >= 1")
 
@@ -150,12 +158,7 @@ async def get_dashboard_data(
         return await _request("dashboard-data/", params=params)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else None
-        message = ""
-        if exc.response is not None:
-            try:
-                message = exc.response.text[:300]
-            except Exception:
-                message = str(exc)
+        message = exc.response.text[:300] if exc.response is not None else str(exc)
         logger.warning("Agmarknet get_dashboard_data failed: %s", status)
         return {
             "success": False,
@@ -227,32 +230,225 @@ async def agmarknet_get(path: str, query: dict[str, Any] | None = None) -> dict[
 
 
 @mcp.tool()
-async def marketwise_price_arrival(
-    group: list[int],
-    commodity: list[int],
-    district: list[int],
-    market: list[int],
-    variety: int,
-    state: int,
-    grades: list[int] | None = None,
+async def get_dashboard_filters(dashboard_name: str = "marketwise_price_arrival") -> dict[str, Any]:
+    """Fetch live filter metadata (states, districts, markets, commodity mappings) for a dashboard."""
+    return await agmarknet_get("dashboard-filters/", {"dashboard_name": dashboard_name})
+
+
+@mcp.tool()
+async def marketwise_price_arrival_by_names(
+    state_name: str = "All States",
+    district_name: str = "All Districts",
+    market_name: str = "All Markets",
+    commodity_group_name: str = "All Commodity Groups",
+    commodity_name: str = "All Commodities",
+    variety_name: str = "All Varieties",
+    grade_name: str = "FAQ",
     date: str | None = None,
-    limit: int = 10,
-    page: int | None = None,
+    limit: int = 50,
+    page: int | None = 1,
+    include_resolved_ids: bool = False,
 ) -> dict[str, Any]:
-    """Convenience wrapper for the marketwise_price_arrival dashboard."""
-    return await get_dashboard_data(
+    """Resolve filter names to IDs using dashboard-filters and fetch marketwise_price_arrival rows."""
+    if date is None:
+        date = date_type.today().isoformat()
+
+    filters_response = await get_dashboard_filters("marketwise_price_arrival")
+    if filters_response.get("success") is False or filters_response.get("error"):
+        return {
+            "success": False,
+            "error": "filters_fetch_failed",
+            "filters_response": filters_response,
+        }
+
+    meta = filters_response.get("data") or {}
+    states = meta.get("state_data") or []
+    districts = meta.get("district_data") or []
+    markets = meta.get("market_data") or []
+    groups = meta.get("cmdt_group_data") or []
+    commodities = meta.get("cmdt_data") or []
+    varieties = meta.get("variety_data") or []
+    grades = meta.get("grade_data") or []
+
+    resolved_state = None
+    if not _is_all_value(state_name, "All States"):
+        resolved_state = next((s for s in states if _norm_text(s.get("state_name")) == _norm_text(state_name)), None)
+        if not resolved_state:
+            return {
+                "success": False,
+                "error": "state_not_found",
+                "state_name": state_name,
+            }
+
+    resolved_district = None
+    if not _is_all_value(district_name, "All Districts"):
+        state_id = resolved_state.get("state_id") if resolved_state else None
+        resolved_district = next(
+            (
+                d
+                for d in districts
+                if _norm_text(d.get("district_name")) == _norm_text(district_name)
+                and (state_id is None or d.get("state_id") == state_id)
+            ),
+            None,
+        )
+        if not resolved_district:
+            return {
+                "success": False,
+                "error": "district_not_found",
+                "district_name": district_name,
+                "state_name": state_name,
+            }
+
+    resolved_market = None
+    if not _is_all_value(market_name, "All Markets"):
+        district_id = resolved_district.get("id") if resolved_district else None
+        resolved_market = next(
+            (
+                m
+                for m in markets
+                if _norm_text(m.get("mkt_name")) == _norm_text(market_name)
+                and (district_id is None or m.get("district_id") == district_id)
+            ),
+            None,
+        )
+        if not resolved_market:
+            return {
+                "success": False,
+                "error": "market_not_found",
+                "market_name": market_name,
+                "district_name": district_name,
+            }
+
+    resolved_group = None
+    if not _is_all_value(commodity_group_name, "All Commodity Groups"):
+        resolved_group = next(
+            (g for g in groups if _norm_text(g.get("cmdt_grp_name")) == _norm_text(commodity_group_name)),
+            None,
+        )
+        if not resolved_group:
+            return {
+                "success": False,
+                "error": "commodity_group_not_found",
+                "commodity_group_name": commodity_group_name,
+            }
+
+    resolved_commodity = None
+    if not _is_all_value(commodity_name, "All Commodities"):
+        group_id = resolved_group.get("id") if resolved_group else None
+        resolved_commodity = next(
+            (
+                c
+                for c in commodities
+                if _norm_text(c.get("cmdt_name")) == _norm_text(commodity_name)
+                and (group_id is None or c.get("cmdt_group_id") == group_id)
+            ),
+            None,
+        )
+        if not resolved_commodity:
+            return {
+                "success": False,
+                "error": "commodity_not_found",
+                "commodity_name": commodity_name,
+                "commodity_group_name": commodity_group_name,
+            }
+
+    resolved_variety = next(
+        (v for v in varieties if _norm_text(v.get("variety_name")) == _norm_text(variety_name)),
+        None,
+    )
+    if not resolved_variety:
+        return {
+            "success": False,
+            "error": "variety_not_found",
+            "variety_name": variety_name,
+        }
+
+    resolved_grade = next(
+        (g for g in grades if _norm_text(g.get("grade_name")) == _norm_text(grade_name)),
+        None,
+    )
+    if not resolved_grade:
+        return {
+            "success": False,
+            "error": "grade_not_found",
+            "grade_name": grade_name,
+        }
+
+    response = await get_dashboard_data(
         dashboard="marketwise_price_arrival",
         date=date,
-        group=group,
-        commodity=commodity,
-        variety=variety,
-        state=state,
-        district=district,
-        market=market,
-        grades=grades,
+        group=[resolved_group.get("id")] if resolved_group else None,
+        commodity=[resolved_commodity.get("cmdt_id")] if resolved_commodity else None,
+        variety=resolved_variety.get("id"),
+        state=resolved_state.get("state_id") if resolved_state else None,
+        district=[resolved_district.get("id")] if resolved_district else None,
+        market=[resolved_market.get("id")] if resolved_market else None,
+        grades=[resolved_grade.get("id")],
         limit=limit,
         page=page,
         format="json",
+    )
+
+    result: dict[str, Any] = {
+        "success": response.get("success", True),
+        "query": {
+            "dashboard": "marketwise_price_arrival",
+            "date": date,
+            "state_name": state_name,
+            "district_name": district_name,
+            "market_name": market_name,
+            "commodity_group_name": commodity_group_name,
+            "commodity_name": commodity_name,
+            "variety_name": variety_name,
+            "grade_name": grade_name,
+            "limit": limit,
+            "page": page,
+        },
+        "result": response,
+    }
+
+    if include_resolved_ids:
+        result["resolved_filters"] = {
+            "state": resolved_state,
+            "district": resolved_district,
+            "market": resolved_market,
+            "commodity_group": resolved_group,
+            "commodity": resolved_commodity,
+            "variety": resolved_variety,
+            "grade": resolved_grade,
+        }
+
+    return result
+
+
+@mcp.tool()
+async def marketwise_price_arrival(
+    state_name: str = "All States",
+    district_name: str = "All Districts",
+    market_name: str = "All Markets",
+    commodity_group_name: str = "All Commodity Groups",
+    commodity_name: str = "All Commodities",
+    variety_name: str = "All Varieties",
+    grade_name: str = "FAQ",
+    date: str | None = None,
+    limit: int = 50,
+    page: int | None = 1,
+    include_resolved_ids: bool = False,
+) -> dict[str, Any]:
+    """Name-based marketwise query wrapper. No ID inputs required."""
+    return await marketwise_price_arrival_by_names(
+        state_name=state_name,
+        district_name=district_name,
+        market_name=market_name,
+        commodity_group_name=commodity_group_name,
+        commodity_name=commodity_name,
+        variety_name=variety_name,
+        grade_name=grade_name,
+        date=date,
+        limit=limit,
+        page=page,
+        include_resolved_ids=include_resolved_ids,
     )
 
 
