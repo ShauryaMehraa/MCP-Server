@@ -17,7 +17,13 @@ Get real-time data about:
 ### Install
 
 ```bash
-pip install -r requirements.txt
+poetry install
+```
+
+If Poetry is not installed:
+
+```bash
+py -m pip install --user poetry
 ```
 
 ### Run
@@ -244,6 +250,87 @@ Re-tested on **2026-03-25 04:04 UTC** after splitting into two independent MCP s
 | 8 | `soilhealth_get_districts_by_state(first_state, subdistrict=True)` | Passed (`count=9`) |
 | 9 | `soilhealth_get_fertilizer_recommendations(natural_farming=True)` | Passed (`count=1`) |
 | 10 | `soilhealth_get_states(code=ZZ)` | Passed (`count=0`) |
+
+## Latest `test.py` Output (10 Queries)
+
+Executed with:
+
+```bash
+py -m poetry run python test.py
+```
+
+Exact output:
+
+```json
+{
+  "timestamp_utc": "2026-03-25T05:13:27.036752+00:00",
+  "total_queries": 10,
+  "pass_count": 10,
+  "fail_count": 0,
+  "queries": [
+    {
+      "query_no": 1,
+      "name": "agmarknet.get_dashboard_data(limit=3)",
+      "passed": true,
+      "summary": "matched=None pages=None"
+    },
+    {
+      "query_no": 2,
+      "name": "agmarknet.marketwise_price_arrival_dynamic(wheat)",
+      "passed": true,
+      "summary": "matched=1 pages=2"
+    },
+    {
+      "query_no": 3,
+      "name": "agmarknet.agmarknet_get(limit=2)",
+      "passed": true,
+      "summary": "matched=None pages=None"
+    },
+    {
+      "query_no": 4,
+      "name": "agmarknet.get_by_absolute_url(page=2)",
+      "passed": true,
+      "summary": "matched=None pages=None"
+    },
+    {
+      "query_no": 5,
+      "name": "agmarknet.marketwise_price_arrival_dynamic(cereals)",
+      "passed": true,
+      "summary": "matched=7 pages=2"
+    },
+    {
+      "query_no": 6,
+      "name": "soilhealth.soilhealth_get_states()",
+      "passed": true,
+      "summary": "count=33"
+    },
+    {
+      "query_no": 7,
+      "name": "soilhealth.soilhealth_get_states(code=AP)",
+      "passed": true,
+      "summary": "count=0"
+    },
+    {
+      "query_no": 8,
+      "name": "soilhealth.soilhealth_get_districts_by_state(first_state)",
+      "passed": true,
+      "summary": "count=0"
+    },
+    {
+      "query_no": 9,
+      "name": "soilhealth.soilhealth_get_crop_registries(first_state)",
+      "passed": true,
+      "summary": "count=17"
+    },
+    {
+      "query_no": 10,
+      "name": "soilhealth.soilhealth_get_fertilizer_recommendations(first_state)",
+      "passed": true,
+      "summary": "count=1"
+    }
+  ]
+}
+```
 
 ## Configuration
 
