@@ -177,6 +177,27 @@ Three simple steps:
 - **100% uptime** in testing (10/10 successful calls)
 - **Automatic retries** if the backend is slow
 
+## Latest Live Re-Test (10 Queries)
+
+Re-tested on **2026-03-25 (UTC)** against live backends:
+- Agmarknet: `https://api.agmarknet.gov.in/v1`
+- Soil Health: `https://soilhealth4.dac.gov.in`
+
+**Result:** 10/10 queries passed.
+
+| # | Query | Result |
+|---|---|---|
+| 1 | `get_dashboard_data(dashboard="marketwise_price_arrival", limit=5)` | Passed (records returned) |
+| 2 | `marketwise_price_arrival_dynamic(commodity_contains="wheat", limit_per_page=20, max_pages=2)` | Passed (matched_count=1, pages_fetched=2) |
+| 3 | `marketwise_price_arrival_dynamic(commodity_contains="rice", commodity_group_contains="cereals", trend="down", limit_per_page=20, max_pages=3)` | Passed (matched_count=0, query executed successfully) |
+| 4 | `agmarknet_get(path="dashboard-data/", query={"dashboard":"marketwise_price_arrival","limit":3})` | Passed (records returned) |
+| 5 | `get_by_absolute_url(next_page/page=2 URL)` | Passed (pagination fetch successful) |
+| 6 | `soilhealth_get_states()` | Passed (count=33) |
+| 7 | `soilhealth_get_states(code="AP")` | Passed (count=0, query executed successfully) |
+| 8 | `soilhealth_get_districts_by_state(first_state)` | Passed (count=0, query executed successfully) |
+| 9 | `soilhealth_get_crop_registries(first_state, gfr_only=True)` | Passed (count=17) |
+| 10 | `soilhealth_get_fertilizer_recommendations(first_state, sample NPK/OC)` | Passed (count=1) |
+
 ## Configuration
 
 Edit `.env` to change:
